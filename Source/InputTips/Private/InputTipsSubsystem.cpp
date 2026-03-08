@@ -99,7 +99,7 @@ bool UInputTipsSubsystem::GetMappingDisplayName(FName KeyName, const UObject* Ta
 
 	auto Mappings = EnhancedInputSubsystem->GetAllPlayerMappableActionKeyMappings();
 	const auto Index = FastQueryMap.Find(KeyName);
-	if (Index && Mappings[*Index].GetPlayerMappableKeySettings())
+	if (Index && Mappings.IsValidIndex(*Index) && Mappings[*Index].GetPlayerMappableKeySettings())
 	{
 		if (QueryDisplayInputTips(KeyName, TagsContainerObject, DisplayName, bShouldDisplay))
 		{
