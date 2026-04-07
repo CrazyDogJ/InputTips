@@ -42,6 +42,11 @@ void UInputTipsSubsystem::RebuildFastQueryMap()
 
 void UInputTipsSubsystem::AddInputTipsDataAsset(UInputTipsDataAsset* InputTipsDataAsset)
 {
+	if (!InputTipsDataAsset)
+	{
+		return;
+	}
+	
 	DisplayingInputTipsDataAssets.Add(InputTipsDataAsset);
 
 	TArray<FName> Names;
@@ -51,6 +56,11 @@ void UInputTipsSubsystem::AddInputTipsDataAsset(UInputTipsDataAsset* InputTipsDa
 
 void UInputTipsSubsystem::RemoveInputTipsDataAsset(UInputTipsDataAsset* InputTipsDataAsset)
 {
+	if (!InputTipsDataAsset)
+	{
+		return;
+	}
+	
 	DisplayingInputTipsDataAssets.Remove(InputTipsDataAsset);
 	
 	TArray<FName> Names;
