@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "InputTipsDataAsset.h"
 #include "Subsystems/LocalPlayerSubsystem.h"
 #include "InputTipsSubsystem.generated.h"
 
@@ -30,11 +31,14 @@ public:
 	UPROPERTY()
 	UEnhancedInputLocalPlayerSubsystem* EnhancedInputSubsystem;
 	
-	UPROPERTY(BlueprintReadOnly)
-	TArray<FName> DisplayingMappableKeys;
+	//UPROPERTY(BlueprintReadOnly)
+	//TArray<FName> DisplayingMappableKeys;
 
 	UPROPERTY(BlueprintReadOnly)
 	TArray<UInputTipsDataAsset*> DisplayingInputTipsDataAssets;
+	
+	UPROPERTY(BlueprintReadOnly)
+	TMap<FName, FTagInputTipsArray> DisplayingInputTips;
 	
 	UPROPERTY(BlueprintAssignable)
 	FOnDisplayKeyChangedDelegate OnDisplayKeysAddedEvent;
@@ -47,18 +51,26 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Input Tips")
 	void RemoveInputTipsDataAsset(UInputTipsDataAsset* InputTipsDataAsset);
+
+	UFUNCTION(BlueprintCallable, Category = "Input Tips")
+	void AddSingleInputTips(FName IdentityName, FName KeyName, const FTagInputTipsArray& InTipsQuery);
 	
 	UFUNCTION(BlueprintCallable, Category = "Input Tips")
-	void AddDisplayingMappableKeys(TArray<FName> InKeyNames);
-
+	void RemoveInputTipsByName(FName IdentityName);
+	
 	UFUNCTION(BlueprintCallable, Category = "Input Tips")
-	void RemoveDisplayingMappableKeys(TArray<FName> InKeyNames);
-
+	void SetKeyAutoClear(FName KeyName, bool bAutoClear);
+	
+	void AddInputTips(const FName& IdentityName, const FName& KeyName, const FTagInputTipsArray& InTipsQuery, bool& bIsNew);
+	void RemoveInputTips(const FName& IdentityName, TArray<FName>& EmptyTips);
+	
 	UFUNCTION(BlueprintPure, Category = "Input Tips")
 	bool GetMappingDisplayName(FName KeyName, const UObject* TagsContainerObject, FText& DisplayName, bool& bShouldDisplay);
 
+	// Get mappable input datas by fast mapping query in enhanced input subsystem.
 	UFUNCTION(BlueprintPure, Category = "Input Tips")
 	bool GetMappingKeyName(FName KeyName, FText& DisplayKeyName);
 
+	// Base query function for input tips runtime query.
 	bool QueryDisplayInputTips(FName KeyName, const UObject* TagsContainerObject, FText& DisplayInputTips, bool& bShouldDisplay);
 };

@@ -12,6 +12,9 @@ struct FTagInputTips
 {
 	GENERATED_BODY()
 	
+	UPROPERTY(BlueprintReadOnly, Transient)
+	FName IdentityName = "";
+	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	FGameplayTagQuery Query;
 
@@ -28,6 +31,9 @@ struct FTagInputTipsArray
 	GENERATED_BODY()
 	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	bool bAutoClear = false;
+	
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	TArray<FTagInputTips> TipsTagQuery;
 
 	bool GetDisplayTips(const UObject* TagAssetObject, FText& DisplayTips, bool& bDisplay) const;
@@ -39,6 +45,9 @@ class INPUTTIPS_API UInputTipsDataAsset : public UDataAsset
 	GENERATED_BODY()
 
 public:
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Input Tips")
+	FName IdentityName = "";
+	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Input Tips")
 	TMap<FName, FTagInputTipsArray> DisplayInputTips;
 };

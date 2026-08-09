@@ -5,7 +5,6 @@
 
 #include "EnhancedActionKeyMapping.h"
 #include "EnhancedInputSubsystems.h"
-#include "InputTipsDataAsset.h"
 #include "PlayerMappableKeySettings.h"
 
 void UInputTipsSubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -23,7 +22,7 @@ void UInputTipsSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 void UInputTipsSubsystem::Deinitialize()
 {
 	FastQueryMap.Empty();
-	DisplayingMappableKeys.Empty();
+	//DisplayingMappableKeys.Empty();
 
 	EnhancedInputSubsystem = nullptr;
 }
@@ -48,10 +47,17 @@ void UInputTipsSubsystem::AddInputTipsDataAsset(UInputTipsDataAsset* InputTipsDa
 	}
 	
 	DisplayingInputTipsDataAssets.Add(InputTipsDataAsset);
-
-	TArray<FName> Names;
-	InputTipsDataAsset->DisplayInputTips.GetKeys(Names);
-	AddDisplayingMappableKeys(Names);
+	TArray<FName> NewKeyNames;
+	for (const auto InputTip : InputTipsDataAsset->DisplayInputTips)
+	{
+		bool bIsNew;
+		AddInputTips(InputTipsDataAsset->IdentityName, InputTip.Key, InputTip.Value, bIsNew);
+		if (bIsNew)
+		{
+			NewKeyNames.Add(InputTip.Key);
+		}
+	}
+	OnDisplayKeysAddedEvent.Broadcast(NewKeyNames);
 }
 
 void UInputTipsSubsystem::RemoveInputTipsDataAsset(UInputTipsDataAsset* InputTipsDataAsset)
@@ -62,30 +68,89 @@ void UInputTipsSubsystem::RemoveInputTipsDataAsset(UInputTipsDataAsset* InputTip
 	}
 	
 	DisplayingInputTipsDataAssets.Remove(InputTipsDataAsset);
-	
-	TArray<FName> Names;
-	InputTipsDataAsset->DisplayInputTips.GetKeys(Names);
-	RemoveDisplayingMappableKeys(Names);
+	RemoveInputTipsByName(InputTipsDataAsset->IdentityName);
 }
 
-void UInputTipsSubsystem::AddDisplayingMappableKeys(TArray<FName> InKeyNames)
+void UInputTipsSubsystem::AddSingleInputTips(const FName IdentityName, const FName KeyName,
+	const FTagInputTipsArray& InTipsQuery)
 {
-	for (auto Name : InKeyNames)
+	bool bIsNew;
+	AddInputTips(IdentityName, KeyName, InTipsQuery, bIsNew);
+	if (bIsNew)
 	{
-		DisplayingMappableKeys.AddUnique(Name);
+		OnDisplayKeysAddedEvent.Broadcast({KeyName});
 	}
-	
-	OnDisplayKeysAddedEvent.Broadcast(InKeyNames);
 }
 
-void UInputTipsSubsystem::RemoveDisplayingMappableKeys(TArray<FName> InKeyNames)
+void UInputTipsSubsystem::RemoveInputTipsByName(const FName IdentityName)
 {
-	for (auto Name : InKeyNames)
+	TArray<FName> RemovedKeyNames;
+	RemoveInputTips(IdentityName, RemovedKeyNames);
+	if (!RemovedKeyNames.IsEmpty())
 	{
-		DisplayingMappableKeys.Remove(Name);
+		OnDisplayKeysRemovedEvent.Broadcast(RemovedKeyNames);
+	}
+}
+
+void UInputTipsSubsystem::SetKeyAutoClear(const FName KeyName, const bool bAutoClear)
+{
+	if (const auto Found = DisplayingInputTips.Find(KeyName))
+	{
+		Found->bAutoClear = bAutoClear;
+	}
+}
+
+void UInputTipsSubsystem::AddInputTips(const FName& IdentityName, const FName& KeyName,
+                                       const FTagInputTipsArray& InTipsQuery, bool& bIsNew)
+{
+	bIsNew = false;
+	if (!IdentityName.IsValid() || !KeyName.IsValid())
+	{
+		return;
+	}
+	
+	if (const auto FoundTips = DisplayingInputTips.Find(KeyName))
+	{
+		auto Copy = InTipsQuery.TipsTagQuery;
+		for (auto& Tip : Copy)
+		{
+			Tip.IdentityName = IdentityName;
+		}
+		FoundTips->TipsTagQuery.Append(Copy);
+	}
+	else
+	{
+		auto Copy = InTipsQuery.TipsTagQuery;
+		for (auto& Tip : Copy)
+		{
+			Tip.IdentityName = IdentityName;
+		}
+		DisplayingInputTips.Add(KeyName, FTagInputTipsArray(InTipsQuery.bAutoClear, Copy));
+		bIsNew = true;
+	}
+}
+
+void UInputTipsSubsystem::RemoveInputTips(const FName& IdentityName, TArray<FName>& EmptyTips)
+{
+	EmptyTips.Empty();
+	
+	for (auto& Tip : DisplayingInputTips)
+	{
+		Tip.Value.TipsTagQuery.RemoveAll([IdentityName](const FTagInputTips& InTips)
+		{
+			return InTips.IdentityName == IdentityName;
+		});
+		
+		if (Tip.Value.TipsTagQuery.IsEmpty() && Tip.Value.bAutoClear)
+		{
+			EmptyTips.Add(Tip.Key);
+		}
 	}
 
-	OnDisplayKeysRemovedEvent.Broadcast(InKeyNames);
+	for (const auto Name : EmptyTips)
+	{
+		DisplayingInputTips.Remove(Name);
+	}
 }
 
 bool UInputTipsSubsystem::GetMappingKeyName(FName KeyName, FText& DisplayKeyName)
@@ -111,11 +176,13 @@ bool UInputTipsSubsystem::GetMappingDisplayName(FName KeyName, const UObject* Ta
 	const auto Index = FastQueryMap.Find(KeyName);
 	if (Index && Mappings.IsValidIndex(*Index) && Mappings[*Index].GetPlayerMappableKeySettings())
 	{
+		// Use current runtime query.
 		if (QueryDisplayInputTips(KeyName, TagsContainerObject, DisplayName, bShouldDisplay))
 		{
 			return true;
 		}
 		
+		// Fallback to enhanced input mapping context display name.
 		DisplayName = Mappings[*Index].GetPlayerMappableKeySettings()->DisplayName;
 		bShouldDisplay = true;
 		return true;
@@ -126,14 +193,11 @@ bool UInputTipsSubsystem::GetMappingDisplayName(FName KeyName, const UObject* Ta
 
 bool UInputTipsSubsystem::QueryDisplayInputTips(const FName KeyName, const UObject* TagsContainerObject, FText& DisplayInputTips, bool& bShouldDisplay)
 {
-	for (const auto Itr : DisplayingInputTipsDataAssets)
+	for (const auto Mapping : DisplayingInputTips)
 	{
-		for (const auto Mapping : Itr->DisplayInputTips)
+		if (Mapping.Key == KeyName)
 		{
-			if (Mapping.Key == KeyName)
-			{
-				return Mapping.Value.GetDisplayTips(TagsContainerObject, DisplayInputTips, bShouldDisplay);
-			}
+			return Mapping.Value.GetDisplayTips(TagsContainerObject, DisplayInputTips, bShouldDisplay);
 		}
 	}
 
