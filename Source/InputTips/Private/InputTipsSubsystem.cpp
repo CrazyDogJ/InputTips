@@ -9,6 +9,7 @@
 
 void UInputTipsSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
+	Super::Initialize(Collection);
 	Collection.InitializeDependency<UEnhancedInputLocalPlayerSubsystem>();
 	
 	EnhancedInputSubsystem = GetLocalPlayer()->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>();
@@ -22,9 +23,16 @@ void UInputTipsSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 void UInputTipsSubsystem::Deinitialize()
 {
 	FastQueryMap.Empty();
-	//DisplayingMappableKeys.Empty();
+	// 修复：子系统关闭时解除绑定并释放当前显示的提示资产。
+	if (EnhancedInputSubsystem)
+	{
+		EnhancedInputSubsystem->ControlMappingsRebuiltDelegate.RemoveDynamic(this, &UInputTipsSubsystem::RebuildFastQueryMap);
+	}
+	DisplayingInputTipsDataAssets.Empty();
+	DisplayingInputTips.Empty();
 
 	EnhancedInputSubsystem = nullptr;
+	Super::Deinitialize();
 }
 
 void UInputTipsSubsystem::RebuildFastQueryMap()
@@ -35,7 +43,11 @@ void UInputTipsSubsystem::RebuildFastQueryMap()
 	FastQueryMap.Empty();
 	for (int i = 0; i < Mappings.Num(); ++i)
 	{
-		FastQueryMap.Add(Mappings[i].GetPlayerMappableKeySettings()->Name, i);
+		// 修复：跳过没有玩家映射设置的动作。
+		if (const auto Settings = Mappings[i].GetPlayerMappableKeySettings())
+		{
+			FastQueryMap.Add(Settings->Name, i);
+		}
 	}
 }
 
@@ -159,7 +171,8 @@ bool UInputTipsSubsystem::GetMappingKeyName(FName KeyName, FText& DisplayKeyName
 	
 	auto Mappings = EnhancedInputSubsystem->GetAllPlayerMappableActionKeyMappings();
 	const auto Index = FastQueryMap.Find(KeyName);
-	if (Index && Mappings[*Index].GetPlayerMappableKeySettings())
+	if (Index && Mappings.IsValidIndex(*Index) && Mappings[*Index].GetPlayerMappableKeySettings()
+		&& Mappings[*Index].GetPlayerMappableKeySettings()->Name == KeyName)
 	{
 		DisplayKeyName = Mappings[*Index].Key.GetDisplayName(false);
 		return true;
@@ -174,7 +187,8 @@ bool UInputTipsSubsystem::GetMappingDisplayName(FName KeyName, const UObject* Ta
 
 	auto Mappings = EnhancedInputSubsystem->GetAllPlayerMappableActionKeyMappings();
 	const auto Index = FastQueryMap.Find(KeyName);
-	if (Index && Mappings.IsValidIndex(*Index) && Mappings[*Index].GetPlayerMappableKeySettings())
+	if (Index && Mappings.IsValidIndex(*Index) && Mappings[*Index].GetPlayerMappableKeySettings()
+		&& Mappings[*Index].GetPlayerMappableKeySettings()->Name == KeyName)
 	{
 		// Use current runtime query.
 		if (QueryDisplayInputTips(KeyName, TagsContainerObject, DisplayName, bShouldDisplay))
